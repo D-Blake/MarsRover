@@ -12,8 +12,7 @@ import lejos.nxt.Sound;
 public class BotEngine implements IButtonInterface, ILightInterface, IUltrasonicInterface {
 	BotMovement movement = new BotMovement();
 	private final int maxVolume = 100;
-	private boolean sensingCans = true;
-	public State state = State.FIND;
+	public State currentState = State.INIT;
 	private final int halfVolume = 50;
 	CanSensing canSense = new CanSensing();
 	TouchSensing touchSense = new TouchSensing();
@@ -21,15 +20,11 @@ public class BotEngine implements IButtonInterface, ILightInterface, IUltrasonic
 	int canCount = 3;
 
 	public State getState() {
-		return state;
+		return currentState;
 	}
 
 	public void StartBotEngine() {
 		BotTimer timer = new BotTimer();
-		// IButtonInterface buttonListener = null;
-		// ILightInterface lightListener = null;
-		// IUltrasonicInterface ultrasonicListener = null;
-
 		canSense.subscribe(this);
 		touchSense.subscribe(this);
 		lightSense.subscribe(this);
@@ -37,33 +32,18 @@ public class BotEngine implements IButtonInterface, ILightInterface, IUltrasonic
 		Motor.A.setSpeed(250);
 		Motor.C.setSpeed(250);
 		movement.Spin();
+		currentState = State.FORWARD;
 		new Thread(touchSense).start();
 		new Thread(canSense).start();
 		new Thread(lightSense).start();
-		while (canCount > 0) {
-			/*switch (state) {
-			case FIND:
-				break;
-			case FOUND:
-				break;
-			case PUSH:
-				break;
-			case RESET:
-				break;
-			case EVAC:
-				break;
-			}*/
+		while (canCount >= 0) {
+			if (canCount == 0) {
+				currentState = State.EVAC;
+			}
 		}
 		canSense.StopCanSense();
 		lightSense.StopLightSensing();
 		touchSense.StopRunningTouch();
-		movement.ForwardMove();
-		try {
-			Thread.sleep(2000);
-		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
 		movement.StopMovement();
 		timer.StopTimer();
 		timer.DisplayTime();
@@ -72,34 +52,70 @@ public class BotEngine implements IButtonInterface, ILightInterface, IUltrasonic
 
 	@Override
 	public void OnCanFound() {
-		// TODO Auto-generated method stub
 		synchronized (this) {
-			if (sensingCans) {
+			switch (currentState) {
+			case INIT:
+				break;
+			case FORWARD:
 				movement.ForwardMove();
-				SwapSensing();
+				currentState = State.BACK;
+				break;
+			case BACK:
+				break;
+			case EVAC:
+				movement.ForwardMove();
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				currentState = State.INIT;
+				canCount--;
+				break;
 			}
 		}
-
 	}
 
 	@Override
 	public void OnDarkFound() {
-		// TODO Auto-generated method stub
 		synchronized (this) {
-			if (!sensingCans) {
-				touchSense.Sleep();
+			switch (currentState) {
+			case INIT:
+				break;
+			case FORWARD:
+				break;
+			case BACK:
 				movement.BackwardMove();
-				lightSense.Sleep();
-				canCount--;
-				SwapSensing();
+				try {
+					Thread.sleep(2000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
 				movement.Spin();
+				try {
+					Thread.sleep(650);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				currentState = State.FORWARD;
+				canCount--;
+				break;
+			case EVAC:
+				movement.ForwardMove();
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				currentState = State.INIT;
+				canCount--;
+				break;
 			}
 		}
 	}
 
 	@Override
 	public void OnButtonPress() {
-		// TODO Auto-generated method stub
 		synchronized (this) {
 			if (touchSense.isLowVol()) {
 				Sound.setVolume(halfVolume);
@@ -107,10 +123,6 @@ public class BotEngine implements IButtonInterface, ILightInterface, IUltrasonic
 				Sound.setVolume(maxVolume);
 			}
 		}
-	}
-
-	public void SwapSensing() {
-		sensingCans = !sensingCans;
 	}
 
 }
